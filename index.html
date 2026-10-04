@@ -24,7 +24,7 @@
     <h2>Trasmettitore Posizione</h2>
     <p>Stato attuale: <span id="status" style="background:#e0e0e0;">INATTIVO</span></p>
     
-    <button class="btn btn-real" onclick="setMode('REAL')">📡 Trasmetti Posizione Reale</button>
+    <button class="btn btn-real" onclick="setMode('REAL')">📡 Reale (Ogni 5 min quando attivo)</button>
     <button class="btn btn-freeze" onclick="setMode('FROZEN')">⏸️ Congela Posizione Attuale</button>
     <button class="btn btn-fake" onclick="setMode('CUSTOM')">🎭 Trasmetti Posizione Fittizia</button>
   </div>
@@ -38,12 +38,13 @@
   <script>
     // CONFIGURAZIONE FIREBASE
     const firebaseConfig = {
-      databaseURL: "https://posizione-live-andrea-default-rtdb.europe-west1.firebasedatabase.app/"
+      databaseURL: "INSERISCI_QUI_IL_TUO_DATABASE_URL"
     };
     firebase.initializeApp(firebaseConfig);
     const db = firebase.database();
 
-    let watchId = null;
+    let intervalId = null;
+    let currentMode = 'STOP';
     let fakeLat = 41.8902; // Default: Roma
     let fakeLng = 12.4922;
 
@@ -72,36 +73,62 @@
       });
     }
 
+    function sendRealLocation() {
+      if ("geolocation" in navigator && currentMode === 'REAL') {
+        navigator.geolocation.getCurrentPosition(
+          (p) => sendData(p.coords.latitude, p.coords.longitude, "REALE"),
+          (err) => console.error("Errore GPS: " + err.message),
+          { enableHighAccuracy: true }
+        );
+      }
+    }
+
     function setMode(mode) {
+      currentMode = mode;
       const statusEl = document.getElementById("status");
-      if (watchId !== null) {
-        navigator.geolocation.clearWatch(watchId);
-        watchId = null;
+      
+      if (intervalId !== null) {
+        clearInterval(intervalId);
+        intervalId = null;
       }
 
       if (mode === 'REAL') {
-        statusEl.innerText = "REALE (GPS)";
+        statusEl.innerText = "REALE (Attivo)";
         statusEl.style.background = "#d4edda";
         statusEl.style.color = "#155724";
 
-        if ("geolocation" in navigator) {
-          watchId = navigator.geolocation.watchPosition(
-            (p) => sendData(p.coords.latitude, p.coords.longitude, "REALE"),
-            (err) => alert("Errore GPS: " + err.message),
-            { enableHighAccuracy: true }
-          );
-        }
+        sendRealLocation();
+        intervalId = setInterval(sendRealLocation, 300000); // 5 minuti
+
       } else if (mode === 'FROZEN') {
         statusEl.innerText = "CONGELATO";
         statusEl.style.background = "#fff3cd";
         statusEl.style.color = "#856404";
+
       } else if (mode === 'CUSTOM') {
         statusEl.innerText = "FITTIZIO (MASCHERATO)";
         statusEl.style.background = "#f8d7da";
         statusEl.style.color = "#721c24";
+        
         sendData(fakeLat, fakeLng, "FITTIZIA");
       }
     }
+
+    // RIPARTENZA AUTOMATICA QUANDO LO SCHERMO SI RIACCENDE O SI RITORNA NELL'APP
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "visible" && currentMode === 'REAL') {
+        sendRealLocation(); // Invia subito la nuova posizione reale
+        if (intervalId) clearInterval(intervalId);
+        intervalId = setInterval(sendRealLocation, 300000); // Riavvia il timer
+      }
+    });
+
+    // AGGIORNAMENTO AUTOMATICO QUANDO RITORNA LA CONNESSIONE INTERNET
+    window.addEventListener("online", () => {
+      if (currentMode === 'REAL') {
+        sendRealLocation();
+      }
+    });
   </script>
 </body>
 </html>
