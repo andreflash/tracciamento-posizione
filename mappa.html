@@ -37,18 +37,40 @@
 
     let marker = null;
 
+    // Funzione di sanificazione e correzione automatica coordinate
+    function parseCoordinate(val) {
+      if (val === null || val === undefined) return null;
+      let str = String(val).trim().replace(',', '.');
+      let num = parseFloat(str);
+      if (isNaN(num)) return null;
+
+      // Se iOS ha rimosso il punto creando un numero intero enorme (es. 4414725336847059)
+      if (Math.abs(num) > 180) {
+        let digits = String(val).replace(/[^0-9]/g, '');
+        if (digits.length >= 3) {
+          num = parseFloat(digits.slice(0, 2) + '.' + digits.slice(2));
+        }
+      }
+      return isNaN(num) ? null : num;
+    }
+
     db.ref("shared_location").on("value", (snapshot) => {
       const data = snapshot.val();
       if (data) {
-        const coords = [data.latitude, data.longitude];
-        document.getElementById("time").innerText = data.updatedAt || 'sync_active';
+        const lat = parseCoordinate(data.latitude);
+        const lng = parseCoordinate(data.longitude);
 
-        if (!marker) {
-          marker = L.marker(coords).addTo(map);
-          map.setView(coords, 16);
-        } else {
-          marker.setLatLng(coords);
-          map.panTo(coords);
+        if (lat !== null && lng !== null) {
+          const coords = [lat, lng];
+          document.getElementById("time").innerText = data.updatedAt || 'sync_active';
+
+          if (!marker) {
+            marker = L.marker(coords).addTo(map);
+            map.setView(coords, 16);
+          } else {
+            marker.setLatLng(coords);
+            map.panTo(coords);
+          }
         }
       }
     });
